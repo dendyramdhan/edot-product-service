@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-edot-product-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-edot-product
+spec:
+  selector:
+    matchLabels:
+      app: postgres-edot-product
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-edot-product
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:13
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "user"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-edot-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: "edot_product_db"
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-storage
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-edot-product-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-edot-product
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+  selector:
+    app: postgres-edot-product
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edot-product-service
+spec:
+  selector:
+    matchLabels:
+      app: edot-product-service
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: edot-product-service
+    spec:
+      containers:
+        - name: edot-product-service
+          image: dendyramdhan/edot-product-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: "postgres-edot-product"
+            - name: DB_USER
+              value: "user"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-edot-secret
+                  key: password
+            - name: DB_NAME
+              value: "edot_product_db"
+            - name: DB_PORT
+              value: "5432"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edot-product-service
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+  selector:
+    app: edot-product-service
